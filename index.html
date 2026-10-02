@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PayoffPlot — Options Payoff Diagram Visualizer & Strategy Calculator</title>
+<meta name="description" content="Draw options payoff diagrams for 12 strategies — long call, straddle, strangle, iron condor, spreads and more. Free option strategy payoff calculator with breakeven math.">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: { board: '#22303A', boarddeep: '#1B262E', chalk: '#F5F0E6', chalky: '#FFD166', chalkpink: '#FF8FA3', chalkblue: '#7BDFF2' },
+    fontFamily: { hand: ['"Shantell Sans"', '"Comic Sans MS"', 'cursive'], note: ['Caveat', 'cursive'] }
+  } }
+};
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shantell+Sans:wght@400;500;600;700&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  html { scroll-behavior: smooth; }
+  body {
+    background-color: #22303A;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23n)'/%3E%3C/svg%3E");
+    color: #F5F0E6;
+  }
+  .chalk-card {
+    background: rgba(245, 240, 230, 0.035);
+    border: 2px solid rgba(245, 240, 230, 0.55);
+    border-radius: 14px 16px 13px 17px / 16px 13px 17px 14px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+  }
+  .chalk-card-soft {
+    background: rgba(245, 240, 230, 0.03);
+    border: 1.5px dashed rgba(245, 240, 230, 0.35);
+    border-radius: 12px 14px 12px 15px / 14px 12px 15px 12px;
+  }
+  .chalk-btn {
+    border: 2px solid #FFD166;
+    border-radius: 12px 14px 12px 15px / 14px 12px 15px 12px;
+    transition: transform .12s ease, background .12s ease, color .12s ease;
+  }
+  .chalk-btn:hover { transform: translateY(-1px) rotate(-0.4deg); background: rgba(255,209,102,0.12); }
+  .chalk-btn-solid { background: #FFD166; color: #22303A; border: 2px solid #FFD166; }
+  .chalk-btn-solid:hover { background: #ffdc8a; }
+  .chalk-input {
+    background: rgba(27, 38, 46, 0.85);
+    border: 1.5px solid rgba(245, 240, 230, 0.45);
+    border-radius: 8px 10px 8px 11px / 10px 8px 11px 8px;
+    color: #F5F0E6;
+  }
+  .chalk-input:focus { outline: none; border-color: #FFD166; box-shadow: 0 0 0 2px rgba(255,209,102,0.25); }
+  select.chalk-input option { background: #1B262E; color: #F5F0E6; }
+  .chalk-title { text-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 0 22px rgba(255,209,102,0.15); }
+  .squiggle {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='9' viewBox='0 0 120 9'%3E%3Cpath d='M2 6 Q 12 1, 22 5 T 42 5 T 62 5 T 82 5 T 102 5 T 118 4' fill='none' stroke='%23FFD166' stroke-width='2.5' stroke-linecap='round' opacity='0.85'/%3E%3C/svg%3E");
+    background-repeat: repeat-x; background-position: 0 100%; background-size: 120px 9px;
+    padding-bottom: 12px;
+  }
+  .quiz-pill input { display: none; }
+  .quiz-pill span {
+    display: inline-block; cursor: pointer;
+    border: 1.5px solid rgba(245,240,230,0.4);
+    border-radius: 999px; padding: 0.45rem 0.95rem; font-size: 0.9rem;
+    transition: all .12s ease; user-select: none;
+  }
+  .quiz-pill input:checked + span { border-color: #FFD166; background: rgba(255,209,102,0.16); color: #FFD166; }
+  .quiz-pill span:hover { border-color: rgba(255,209,102,0.7); }
+  .strat-btn { transition: transform .12s ease, border-color .12s ease, background .12s ease; }
+  .strat-btn:hover { transform: translateY(-2px) rotate(-0.3deg); }
+  .strat-btn.active { border-color: #FFD166; background: rgba(255,209,102,0.10); box-shadow: 0 0 0 2px rgba(255,209,102,0.35); }
+  .tape { position: relative; }
+  .tape::before {
+    content: ''; position: absolute; top: -12px; left: 50%; transform: translateX(-50%) rotate(-2deg);
+    width: 92px; height: 24px; background: rgba(255,209,102,0.28);
+    border-left: 1px dashed rgba(255,255,255,0.35); border-right: 1px dashed rgba(255,255,255,0.35);
+  }
+  #payoff-canvas { width: 100%; height: 380px; display: block; touch-action: manipulation; }
+  @media (max-width: 640px) { #payoff-canvas { height: 320px; } }
+  .faq-a { display: none; }
+  .faq-item.open .faq-a { display: block; }
+  .faq-item.open .faq-arrow { transform: rotate(45deg); }
+  .faq-arrow { transition: transform .15s ease; }
+  .no-print {}
+  ::selection { background: rgba(255,209,102,0.4); }
+  input[type=number]::-webkit-inner-spin-button { opacity: 0.4; }
+</style>
+<script id="payoffplot-options-payoff-visualizer-lib">
+/* PayoffPlot - Options Payoff Visualizer: core math (PURE, DOM-free).
+ * Expiry payoff diagrams for 12 option strategies. Every function is a
+ * top-level declaration; no IIFE/modules/exports; no browser globals
+ * are touched in this file.
+ *
+ * A "leg" is { kind: 'call'|'put'|'stock', side: 'long'|'short',
+ *               strike: number, premium: number, qty: number }.
+ * For stock legs, `strike` doubles as the per-share entry price and
+ * `premium` is 0. qty is contracts (options) or share units (stock).
+ */
+
+function ppNum(v, fallback) {
+  var n = (typeof v === 'number') ? v : parseFloat(v);
+  if (typeof n !== 'number' || isNaN(n) || !isFinite(n)) return fallback;
+  return n;
+}
+
+function ppRound2(x) {
+  return Math.round(x * 100) / 100;
+}
+
+/* Rough illustrative premium: a fraction of the strike price. These are
+ * editable placeholders so learners can see the diagram instantly. */
+function ppPrem(strike, frac) {
+  return Math.max(0.5, ppRound2(strike * frac));
+}
+
+function fmtMoney(x) {
+  if (typeof x !== 'number' || !isFinite(x)) return '--';
+  var neg = x < 0;
+  var a = Math.abs(x);
+  var s = a.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (neg ? '-$' : '$') + s;
+}
+
+function fmtSigned(x) {
+  if (typeof x !== 'number' || !isFinite(x)) return '--';
+  return (x >= 0 ? '+' : '-') + fmtMoney(Math.abs(x)).slice(1).replace('$', '$');
+}
+
+/* ------------------------------------------------------------------ */
+/* 12 strategy definitions                                             */
+/* ------------------------------------------------------------------ */
+
+var STRATEGY_DEFS = [
+  {
+    id: 'long-call', name: 'Long Call', tag: 'Bullish · unlimited upside',
+    blurb: 'Buy a call. You profit when the stock rises. Risk is limited to the premium you paid, reward has no ceiling.',
+    defaultLegs: function (S0) {
+      return [{ kind: 'call', side: 'long', strike: ppRound2(S0), premium: ppPrem(S0, 0.05), qty: 1 }];
+    },
+    winIf: 'the stock closes above your breakeven at expiry — every dollar beyond that is pure profit, with no ceiling.',
+    lossIf: 'the stock closes at or below your strike — the call expires worthless and the whole premium is gone.',
+    beNote: 'Breakeven = strike + premium paid. One dollar above it and you are in the green.'
+  },
+  {
+    id: 'long-put', name: 'Long Put', tag: 'Bearish · crash protection',
+    blurb: 'Buy a put. You profit when the stock falls. Risk is limited to the premium; the most you can make is the strike minus the premium (if the stock went to zero).',
+    defaultLegs: function (S0) {
+      return [{ kind: 'put', side: 'long', strike: ppRound2(S0), premium: ppPrem(S0, 0.05), qty: 1 }];
+    },
+    winIf: 'the stock crashes below your breakeven — the lower it goes, the more the put is worth, down to zero.',
+    lossIf: 'the stock stays at or above your strike — the put expires worthless and the premium is gone.',
+    beNote: 'Breakeven = strike − premium paid.'
+  },
+  {
+    id: 'covered-call', name: 'Covered Call', tag: 'Neutral–bullish · income',
+    blurb: 'Own the shares, sell a call against them. You collect premium as income and keep gains up to the strike — but you give up any rally beyond it.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'stock', side: 'long', strike: ppRound2(S0), premium: 0, qty: 1 },
+        { kind: 'call', side: 'short', strike: ppRound2(S0 * 1.05), premium: ppPrem(S0, 0.03), qty: 1 }
+      ];
+    },
+    winIf: 'the stock closes at or above the call strike — you keep the full premium plus the share gain up to the strike.',
+    lossIf: 'the stock tanks — the small premium only offsets a fraction of the share loss.',
+    beNote: 'Breakeven = share price − premium received.'
+  },
+  {
+    id: 'protective-put', name: 'Protective Put', tag: 'Insurance · own the stock',
+    blurb: 'Own the shares, buy a put as insurance. Your downside is floored at the put strike while your upside stays unlimited — you just pay the insurance premium.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'stock', side: 'long', strike: ppRound2(S0), premium: 0, qty: 1 },
+        { kind: 'put', side: 'long', strike: ppRound2(S0 * 0.95), premium: ppPrem(S0, 0.03), qty: 1 }
+      ];
+    },
+    winIf: 'the stock rallies — your shares gain without limit, minus the small insurance cost.',
+    lossIf: 'the stock falls below the put strike — the put caps your loss, but the insurance premium is still spent.',
+    beNote: 'Breakeven = share price + put premium paid.'
+  },
+  {
+    id: 'straddle', name: 'Long Straddle', tag: 'Volatile · direction unknown',
+    blurb: 'Buy a call AND a put at the same strike. You profit from a big move in either direction — you just need the move to be bigger than the combined premium.',
+    defaultLegs: function (S0) {
+      var k = ppRound2(S0);
+      return [
+        { kind: 'call', side: 'long', strike: k, premium: ppPrem(S0, 0.05), qty: 1 },
+        { kind: 'put', side: 'long', strike: k, premium: ppPrem(S0, 0.05), qty: 1 }
+      ];
+    },
+    winIf: 'the stock makes a big move either way past a breakeven — direction does not matter, size does.',
+    lossIf: 'the stock sits still near the strike — both options bleed value and you lose most of the premium.',
+    beNote: 'Two breakevens: strike ± total premium paid.'
+  },
+  {
+    id: 'strangle', name: 'Long Strangle', tag: 'Volatile · cheaper than straddle',
+    blurb: 'Buy an out-of-the-money call and an out-of-the-money put. Cheaper than a straddle, so it costs less — but the stock must move even further before you profit.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'call', side: 'long', strike: ppRound2(S0 * 1.05), premium: ppPrem(S0, 0.03), qty: 1 },
+        { kind: 'put', side: 'long', strike: ppRound2(S0 * 0.95), premium: ppPrem(S0, 0.03), qty: 1 }
+      ];
+    },
+    winIf: 'the stock makes an even bigger move than a straddle needs — the cheaper premium means a wider dead zone in the middle.',
+    lossIf: 'the stock stays between the two strikes — both options expire worthless.',
+    beNote: 'Breakevens: call strike + total premium, and put strike − total premium.'
+  },
+  {
+    id: 'bull-call-spread', name: 'Bull Call Spread', tag: 'Bullish · defined risk',
+    blurb: 'Buy a lower-strike call, sell a higher-strike call. Cheaper than an outright call and risk is defined — but your profit is capped at the width of the spread.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'call', side: 'long', strike: ppRound2(S0 * 0.95), premium: ppPrem(S0, 0.06), qty: 1 },
+        { kind: 'call', side: 'short', strike: ppRound2(S0 * 1.05), premium: ppPrem(S0, 0.02), qty: 1 }
+      ];
+    },
+    winIf: 'the stock closes at or above the higher strike — you collect the full spread width minus the debit you paid.',
+    lossIf: 'the stock stays below the lower strike — both calls expire worthless and the debit is lost.',
+    beNote: 'Breakeven = lower strike + net debit paid.'
+  },
+  {
+    id: 'bear-put-spread', name: 'Bear Put Spread', tag: 'Bearish · defined risk',
+    blurb: 'Buy a higher-strike put, sell a lower-strike put. A cheaper, defined-risk way to bet on a fall — profit is capped at the spread width.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'put', side: 'long', strike: ppRound2(S0 * 1.05), premium: ppPrem(S0, 0.06), qty: 1 },
+        { kind: 'put', side: 'short', strike: ppRound2(S0 * 0.95), premium: ppPrem(S0, 0.02), qty: 1 }
+      ];
+    },
+    winIf: 'the stock closes at or below the lower strike — you collect the full spread width minus the debit.',
+    lossIf: 'the stock stays above the higher strike — both puts expire worthless and the debit is lost.',
+    beNote: 'Breakeven = higher strike − net debit paid.'
+  },
+  {
+    id: 'iron-condor', name: 'Iron Condor', tag: 'Neutral · collect premium',
+    blurb: 'Sell an out-of-the-money put spread and an out-of-the-money call spread. You collect a net credit and keep it all if the stock stays inside the range — risk is strictly defined.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'put', side: 'short', strike: ppRound2(S0 * 0.90), premium: ppPrem(S0, 0.02), qty: 1 },
+        { kind: 'put', side: 'long', strike: ppRound2(S0 * 0.85), premium: ppPrem(S0, 0.01), qty: 1 },
+        { kind: 'call', side: 'short', strike: ppRound2(S0 * 1.10), premium: ppPrem(S0, 0.02), qty: 1 },
+        { kind: 'call', side: 'long', strike: ppRound2(S0 * 1.15), premium: ppPrem(S0, 0.01), qty: 1 }
+      ];
+    },
+    winIf: 'the stock stays between the two short strikes at expiry — you keep the entire credit you collected.',
+    lossIf: 'the stock blasts through either long strike — but the loss is capped at the wing width minus the credit.',
+    beNote: 'Breakevens: short put strike − net credit, and short call strike + net credit.'
+  },
+  {
+    id: 'butterfly', name: 'Long Call Butterfly', tag: 'Neutral · pin the strike',
+    blurb: 'Buy one lower call, sell two middle calls, buy one upper call. A cheap, defined-risk bet that the stock will pin the middle strike at expiry.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'call', side: 'long', strike: ppRound2(S0 * 0.90), premium: ppPrem(S0, 0.04), qty: 1 },
+        { kind: 'call', side: 'short', strike: ppRound2(S0), premium: ppPrem(S0, 0.02), qty: 2 },
+        { kind: 'call', side: 'long', strike: ppRound2(S0 * 1.10), premium: ppPrem(S0, 0.01), qty: 1 }
+      ];
+    },
+    winIf: 'the stock pins the middle strike at expiry — the sweet spot pays the full wing width minus the debit.',
+    lossIf: 'the stock ends outside the wings — the most you can lose is the small debit you paid.',
+    beNote: 'Breakevens: lower strike + net debit, and upper strike − net debit.'
+  },
+  {
+    id: 'collar', name: 'Collar', tag: 'Own the stock · nearly free hedge',
+    blurb: 'Own the shares, buy a protective put, and sell a call to fund it. You get downside protection almost for free — the trade-off is a ceiling on your gains.',
+    defaultLegs: function (S0) {
+      return [
+        { kind: 'stock', side: 'long', strike: ppRound2(S0), premium: 0, qty: 1 },
+        { kind: 'put', side: 'long', strike: ppRound2(S0 * 0.95), premium: ppPrem(S0, 0.03), qty: 1 },
+        { kind: 'call', side: 'short', strike: ppRound2(S0 * 1.05), premium: ppPrem(S0, 0.03), qty: 1 }
+      ];
+    },
+    winIf: 'the stock closes at or above the call strike — you keep the gain up to the strike and the put cost you almost nothing.',
+    lossIf: 'the stock falls below the put strike — the put floors your loss at the distance to the strike plus any net premium.',
+    beNote: 'Breakeven ≈ your share price plus any net premium paid.'
+  },
+  {
+    id: 'cash-secured-put', name: 'Cash-Secured Put', tag: 'Mildly bullish · income',
+    blurb: 'Sell a put while holding enough cash to buy the shares if assigned. You collect premium as income — and if the stock drops, you buy it at an effective discount.',
+    defaultLegs: function (S0) {
+      return [{ kind: 'put', side: 'short', strike: ppRound2(S0 * 0.95), premium: ppPrem(S0, 0.03), qty: 1 }];
+    },
+    winIf: 'the stock stays above the strike — you keep the full premium as income and no shares change hands.',
+    lossIf: 'the stock collapses — you are assigned the shares, so your effective cost is strike minus the premium received.',
+    beNote: 'Breakeven = strike − premium received.'
+  }
+];
+
+function getStrategy(id) {
+  for (var i = 0; i < STRATEGY_DEFS.length; i++) {
+    if (STRATEGY_DEFS[i].id === id) return STRATEGY_DEFS[i];
+  }
+  return STRATEGY_DEFS[0];
+}
+
+function strategyList() {
+  return STRATEGY_DEFS.map(function (d) {
+    return { id: d.id, name: d.name, tag: d.tag };
+  });
+}
+
+/* Deep copy of a strategy's default legs for a given stock price. */
+function defaultLegs(id, S0) {
+  S0 = ppNum(S0, 100);
+  if (!(S0 > 0)) S0 = 100;
+  var legs = getStrategy(id).defaultLegs(S0);
+  return legs.map(function (l) {
+    return { kind: l.kind, side: l.side, strike: ppRound2(l.strike), premium: ppRound2(l.premium), qty: l.qty };
+  });
+}
+
+function legLabel(leg) {
+  var side = leg.side === 'short' ? 'Short' : 'Long';
+  if (leg.kind === 'stock') return side + ' Stock @ ' + fmtMoney(leg.strike);
+  var kind = leg.kind === 'put' ? 'Put' : 'Call';
+  var q = ppNum(leg.qty, 1);
+  return side + ' ' + (q !== 1 ? q + 'x ' : '') + kind + ' @ ' + fmtMoney(leg.strike);
+}
+
+/* ------------------------------------------------------------------ */
+/* Payoff math                                                          */
+/* ------------------------------------------------------------------ */
+
+function legPayoff(leg, S) {
+  var qty = ppNum(leg.qty, 1);
+  var premium = ppNum(leg.premium, 0);
+  var strike = ppNum(leg.strike, 0);
+  var intrinsic;
+  if (leg.kind === 'put') intrinsic = Math.max(strike - S, 0);
+  else if (leg.kind === 'stock') intrinsic = S - strike;
+  else intrinsic = Math.max(S - strike, 0);
+  var dir = (leg.side === 'short') ? -1 : 1;
+  var cash = (leg.side === 'short') ? 1 : -1;
+  return qty * (dir * intrinsic + cash * premium);
+}
+
+function strategyPayoff(legs, S) {
+  var t = 0;
+  for (var i = 0; i < legs.length; i++) t += legPayoff(legs[i], S);
+  return t;
+}
+
+/* Suggested chart bounds for a stock price and a set of legs. */
+function chartRange(S0, legs) {
+  S0 = ppNum(S0, 100);
+  if (!(S0 > 0)) S0 = 100;
+  var maxK = S0;
+  for (var i = 0; i < legs.length; i++) {
+    var k = ppNum(legs[i].strike, 0);
+    if (k > maxK) maxK = k;
+  }
+  return { lo: 0, hi: ppRound2(Math.max(S0 * 2, maxK * 1.6)) };
+}
+
+/* Sampled expiry payoff curve. Returns [{s, p}, ...]. */
+function payoffCurve(id, legs, lo, hi, steps) {
+  lo = ppNum(lo, 0);
+  hi = ppNum(hi, 100);
+  if (!(hi > lo)) hi = lo + 1;
+  steps = Math.max(2, Math.min(2000, Math.floor(ppNum(steps, 200))));
+  var pts = [];
+  for (var i = 0; i <= steps; i++) {
+    var S = lo + (hi - lo) * i / steps;
+    pts.push({ s: ppRound2(S), p: ppRound2(strategyPayoff(legs, S)) });
+  }
+  return pts;
+}
+
+/* Numeric breakeven detection: finds every price where payoff crosses 0. */
+function breakevens(legs, lo, hi) {
+  if (!legs || legs.length === 0) return [];
+  lo = ppNum(lo, 0);
+  hi = ppNum(hi, 100);
+  if (!(hi > lo)) hi = lo + 1;
+  var N = 2000;
+  var out = [];
+  var prevS = lo;
+  var prevP = strategyPayoff(legs, lo);
+  if (Math.abs(prevP) < 1e-9) out.push(ppRound2(lo));
+  for (var i = 1; i <= N; i++) {
+    var S = lo + (hi - lo) * i / N;
+    var p = strategyPayoff(legs, S);
+    if ((prevP < 0 && p > 0) || (prevP > 0 && p < 0)) {
+      var t = Math.abs(prevP) / (Math.abs(prevP) + Math.abs(p));
+      out.push(ppRound2(prevS + t * (S - prevS)));
+    } else if (p === 0 && prevP !== 0) {
+      out.push(ppRound2(S));
+    }
+    prevS = S;
+    prevP = p;
+  }
+  var tol = (hi - lo) / 400;
+  var uniq = [];
+  for (var j = 0; j < out.length; j++) {
+    if (uniq.length === 0 || Math.abs(out[j] - uniq[uniq.length - 1]) > tol) uniq.push(out[j]);
+  }
+  return uniq;
+}
+
+/* Max profit / max loss over [0, hi], with unlimited detection. */
+function profitLossStats(legs, hi) {
+  hi = ppNum(hi, 100);
+  if (!(hi > 0)) hi = 100;
+  var N = 1200;
+  var maxP = -Infinity, minP = Infinity;
+  for (var i = 0; i <= N; i++) {
+    var p = strategyPayoff(legs, hi * i / N);
+    if (p > maxP) maxP = p;
+    if (p < minP) minP = p;
+  }
+  var pFar = strategyPayoff(legs, hi);
+  var pNear = strategyPayoff(legs, hi * 0.98);
+  var slope = pFar - pNear;
+  return {
+    maxProfit: ppRound2(maxP),
+    maxLoss: ppRound2(minP),
+    profitUnlimited: (Math.abs(pFar - maxP) < 1e-6) && slope > 1e-6,
+    lossUnlimited: (Math.abs(pFar - minP) < 1e-6) && slope < -1e-6
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Quiz: 4 questions -> recommended strategy                            */
+/* ------------------------------------------------------------------ */
+
+function quizQuestions() {
+  return [
+    {
+      key: 'direction',
+      q: 'What do you expect the stock to do before expiry?',
+      options: [
+        { v: 'bullish', t: 'Go up' },
+        { v: 'bearish', t: 'Go down' },
+        { v: 'neutral', t: 'Stay flat' },
+        { v: 'volatile', t: 'Big move — direction unknown' }
+      ]
+    },
+    {
+      key: 'budget',
+      q: 'How much premium are you comfortable paying?',
+      options: [
+        { v: 'high', t: 'A lot — I want the cleanest position' },
+        { v: 'moderate', t: 'A moderate amount' },
+        { v: 'low', t: 'As little as possible' },
+        { v: 'collect', t: 'I would rather collect premium' }
+      ]
+    },
+    {
+      key: 'capped',
+      q: 'Is capped profit OK if it means lower cost and defined risk?',
+      options: [
+        { v: 'yes', t: 'Yes — cap it, keep it cheap' },
+        { v: 'no', t: 'No — I want unlimited upside' }
+      ]
+    },
+    {
+      key: 'ownsStock',
+      q: 'Do you already own 100 shares of the stock?',
+      options: [
+        { v: 'yes', t: 'Yes, I own the shares' },
+        { v: 'no', t: 'No shares' }
+      ]
+    }
+  ];
+}
+
+function recommendStrategy(a) {
+  a = a || {};
+  var dir = a.direction || 'neutral';
+  var budget = a.budget || 'moderate';
+  var capped = a.capped || 'no';
+  var owns = a.ownsStock || 'no';
+  var id, why;
+  if (dir === 'volatile') {
+    if (budget === 'low' || budget === 'collect') {
+      id = 'strangle';
+      why = 'You expect fireworks but do not know the direction, and you want to keep the cost down. A strangle is the budget version of a volatility bet: cheaper premium than a straddle, but the stock must travel further before you profit.';
+    } else {
+      id = 'straddle';
+      why = 'You expect a big move but cannot call the direction. A straddle profits from a large swing either way — the classic "something is about to happen" trade.';
+    }
+  } else if (dir === 'bullish') {
+    if (owns === 'yes' && (capped === 'yes' || budget === 'collect')) {
+      id = 'covered-call';
+      why = 'You are bullish and already own the shares. Selling a call against them collects income while you wait — you only give up gains above the strike.';
+    } else if (capped === 'yes') {
+      id = 'bull-call-spread';
+      why = 'You are bullish and fine with a ceiling. A bull call spread gives you leveraged upside for a fraction of the cost of an outright call, with strictly defined risk.';
+    } else {
+      id = 'long-call';
+      why = 'You are bullish and want the full ride. A long call gives you unlimited upside with risk capped at the premium — the purest bullish bet.';
+    }
+  } else if (dir === 'bearish') {
+    if (owns === 'yes') {
+      id = 'protective-put';
+      why = 'You are bearish but already own the shares. A protective put is insurance: it floors your loss while keeping you in the stock for any rebound.';
+    } else if (capped === 'yes') {
+      id = 'bear-put-spread';
+      why = 'You are bearish and fine with a capped win. A bear put spread is the cheaper, defined-risk version of buying a put outright.';
+    } else {
+      id = 'long-put';
+      why = 'You are bearish and want maximum downside exposure. A long put profits all the way down, with risk limited to the premium.';
+    }
+  } else {
+    if (owns === 'yes') {
+      id = 'collar';
+      why = 'You expect the stock to drift and you already own it. A collar adds nearly-free downside protection (funded by the call you sell) in exchange for a ceiling.';
+    } else if (budget === 'collect') {
+      id = 'iron-condor';
+      why = 'You expect calm and want to get paid for it. An iron condor collects premium that you keep in full if the stock stays inside the range — with strictly capped risk.';
+    } else if (budget === 'low') {
+      id = 'butterfly';
+      why = 'You expect the stock to sit still near a price and want the cheapest ticket. A butterfly pays best if the stock pins the middle strike at expiry.';
+    } else {
+      id = 'iron-condor';
+      why = 'You expect a quiet market. An iron condor turns boredom into income: collect the credit, keep it if the stock stays in the range.';
+    }
+  }
+  var def = getStrategy(id);
+  return { id: id, name: def.name, tag: def.tag, why: why };
+}
+
+/* ------------------------------------------------------------------ */
+/* Plain-English win/loss cards                                         */
+/* ------------------------------------------------------------------ */
+
+function plainEnglishCards(id, legs, hi) {
+  var def = getStrategy(id);
+  var range = chartRange(100, legs);
+  var H = ppNum(hi, range.hi);
+  var stats = profitLossStats(legs, H);
+  var bes = breakevens(legs, 0, H);
+
+  var profitTxt = stats.profitUnlimited
+    ? 'Unlimited — ' + def.winIf
+    : fmtMoney(stats.maxProfit) + ' if ' + def.winIf;
+  var lossTxt = stats.lossUnlimited
+    ? 'Unlimited — this position can lose far more than you put in. Handle with extreme care.'
+    : fmtMoney(Math.abs(stats.maxLoss)) + ' if ' + def.lossIf;
+
+  var beTxt;
+  if (bes.length === 0) {
+    beTxt = 'No breakeven inside this price range — this position ' +
+      (stats.maxProfit > 0 ? 'is already profitable across the chart.' : 'never turns profitable here.');
+  } else if (bes.length === 1) {
+    beTxt = 'You break even at ' + fmtMoney(bes[0]) + ' per share at expiry.';
+  } else {
+    beTxt = 'You break even at ' + bes.map(fmtMoney).join(' and ') + ' per share at expiry.';
+  }
+  beTxt += ' ' + def.beNote;
+
+  return [
+    { title: 'Best case — max profit', body: profitTxt, tone: 'good' },
+    { title: 'Worst case — max loss', body: lossTxt, tone: 'bad' },
+    { title: 'Breakeven point' + (bes.length > 1 ? 's' : ''), body: beTxt, tone: 'neutral' },
+    { title: 'In plain English', body: def.blurb, tone: 'neutral' }
+  ];
+}
+
+/* Chalk colors used for overlay comparison curves. */
+function chalkColors() {
+  return ['#FFD166', '#FF8FA3', '#7BDFF2'];
+}
+
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is an options payoff diagram?",
+      "acceptedAnswer": { "@type": "Answer", "text": "An options payoff diagram is a chart that shows how much money an option strategy makes or loses at expiration for every possible stock price. The horizontal axis is the stock price at expiry, the vertical axis is profit or loss, and the points where the line crosses zero are the breakeven prices." }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I calculate the breakeven of a straddle?",
+      "acceptedAnswer": { "@type": "Answer", "text": "A long straddle has two breakevens: strike price plus the total premium paid, and strike price minus the total premium paid. For example, a straddle at the $100 strike costing $10 total breaks even at $90 and $110 at expiry." }
+    },
+    {
+      "@type": "Question",
+      "name": "Straddle vs strangle — which one should I choose?",
+      "acceptedAnswer": { "@type": "Answer", "text": "A straddle uses at-the-money options and needs a smaller move to profit, but costs more. A strangle uses out-of-the-money options, costs less, but needs a bigger move. Choose a straddle when you expect an imminent large move; choose a strangle when you want cheaper volatility exposure and can wait for a bigger swing." }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the difference between max profit and max loss on a payoff diagram?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Max profit is the highest point of the payoff line — the best possible outcome at expiry. Max loss is the lowest point — the worst possible outcome. Some strategies like a long call have unlimited max profit; defined-risk strategies like spreads cap both numbers." }
+    },
+    {
+      "@type": "Question",
+      "name": "Do payoff diagrams account for time decay?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. Standard payoff diagrams show profit and loss only at expiration, ignoring time decay, changes in implied volatility, commissions, and taxes. They are a teaching snapshot, not a full pricing model." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I compare two option strategies on the same chart?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. PayoffPlot lets you overlay up to three strategies on one chart in different chalk colors, each with its own breakeven markers, so you can visually compare risk and reward side by side." }
+    }
+  ]
+}
+</script>
+</head>
+<body id="top" class="min-h-screen font-sans antialiased">
+
+<!-- ============ STICKY HEADER ============ -->
+<header class="sticky top-0 z-50 border-b border-chalk/20" style="background: rgba(27,38,46,0.92); backdrop-filter: blur(8px);">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 h-16 flex items-center justify-between">
+    <a href="#top" class="flex items-center gap-2.5">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="30" height="30" rx="7" stroke="#FFD166" stroke-width="2" opacity="0.9"/>
+        <path d="M7 24 L14 24 L17 12 L21 26 L24 18 L27 18" stroke="#F5F0E6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-hand font-700 text-xl tracking-wide" style="font-weight:700">PayoffPlot</span>
+    </a>
+    <nav class="flex items-center gap-5 text-sm">
+      <a href="#top" class="hover:text-chalky transition-colors">Home</a>
+      <a href="https://fixoraa.tech" class="hover:text-chalky transition-colors">More Tools</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 pt-10 pb-6 text-center">
+    <p class="font-note text-2xl text-chalky -rotate-2 mb-2">the quant classroom, now on a chalkboard</p>
+    <h1 class="font-hand chalk-title text-4xl sm:text-5xl md:text-6xl leading-tight" style="font-weight:700">
+      <span class="squiggle">Options Payoff</span> Visualizer
+    </h1>
+    <p class="mt-4 max-w-2xl mx-auto text-chalk/80 text-base sm:text-lg">
+      Draw expiry payoff diagrams for 12 option strategies, find breakevens, compare straddle vs strangle
+      side by side — and get a plain-English readout of your best and worst case.
+    </p>
+    <div class="mt-5 inline-flex items-center gap-2 chalk-card px-4 py-2 text-sm">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1l1.8 3.8 4.2.5-3 3 .7 4.2L8 10.7l-3.7 1.8.7-4.2-3-3 4.2-.5z" stroke="#FFD166" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <span class="font-semibold tracking-wide">Unlimited Free Usage</span>
+      <span class="text-chalk/60">· no signup · no paywall · no watermark</span>
+    </div>
+  </section>
+
+  <!-- ============ TOP AD (verbatim) ============ -->
+  <div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pt-4" role="complementary" aria-label="Advertisement">
+    <div class="mx-auto text-center" style="max-width:728px">
+      <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+      <div class="flex justify-center overflow-hidden">
+        <div class="origin-top scale-[0.44] sm:scale-100 shrink-0">
+          <script>
+            atOptions = { 'key' : '4e68ac77881c17fe128a46565d9a4e8c', 'format' : 'iframe', 'height' : 90, 'width' : 728, 'params' : {} };
+          </script>
+          <script src="https://www.highrevenueformat.com/4e68ac77881c17fe128a46565d9a4e8c/invoke.js"></script>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TOOL ============ -->
+  <section class="mx-auto max-w-6xl px-4 sm:px-6 py-8" aria-label="Options payoff visualizer tool">
+
+    <!-- STEP 1: QUIZ -->
+    <div class="chalk-card tape p-5 sm:p-7 mb-8">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="font-hand text-chalky text-2xl" style="font-weight:700">1.</span>
+        <h2 class="font-hand text-2xl sm:text-3xl" style="font-weight:600">Which strategy fits you? <span class="text-chalk/50 text-lg">— the 30-second quiz</span></h2>
+      </div>
+      <p class="text-chalk/70 text-sm mb-5">Answer 4 quick questions and the chalkboard will recommend one of the 12 strategies, with the reasoning spelled out.</p>
+      <div id="quiz-box" class="space-y-5"></div>
+      <div class="mt-6 flex flex-wrap items-center gap-4">
+        <button id="quiz-go" class="chalk-btn chalk-btn-solid font-hand px-6 py-2.5 text-lg" style="font-weight:600">Recommend my strategy →</button>
+        <p id="quiz-msg" class="text-chalkpink text-sm" role="status"></p>
+      </div>
+      <div id="quiz-result" class="hidden mt-5 chalk-card-soft p-5"></div>
+    </div>
+
+    <!-- STEP 2: STRATEGY PICKER -->
+    <div class="chalk-card p-5 sm:p-7 mb-8">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="font-hand text-chalky text-2xl" style="font-weight:700">2.</span>
+        <h2 class="font-hand text-2xl sm:text-3xl" style="font-weight:600">Pick a strategy <span class="text-chalk/50 text-lg">— or tap any card</span></h2>
+      </div>
+      <p class="text-chalk/70 text-sm mb-5">Twelve classroom classics. Selecting one loads its legs into the editor below.</p>
+      <div id="strategy-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+    </div>
+
+    <!-- STEP 3: CHART + CONTROLS -->
+    <div class="chalk-card tape p-5 sm:p-7 mb-8">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="font-hand text-chalky text-2xl" style="font-weight:700">3.</span>
+        <h2 class="font-hand text-2xl sm:text-3xl" style="font-weight:600">Sketch the payoff <span class="text-chalk/50 text-lg">— drag the numbers, watch the chalk move</span></h2>
+      </div>
+
+      <div class="flex flex-wrap items-end gap-4 mt-4 mb-2">
+        <label class="block">
+          <span class="block text-xs uppercase tracking-widest text-chalk/60 mb-1">Stock price today ($)</span>
+          <input id="in-s0" type="number" min="1" step="any" value="100" class="chalk-input px-3 py-2 w-36 text-lg font-semibold">
+        </label>
+        <div class="flex flex-wrap gap-4">
+          <label class="block">
+            <span class="block text-xs uppercase tracking-widest text-chalkpink mb-1">Overlay B — compare</span>
+            <select id="ov-b" class="chalk-input px-3 py-2 text-sm max-w-[190px]"></select>
+          </label>
+          <label class="block">
+            <span class="block text-xs uppercase tracking-widest text-chalkblue mb-1">Overlay C — compare</span>
+            <select id="ov-c" class="chalk-input px-3 py-2 text-sm max-w-[190px]"></select>
+          </label>
+        </div>
+        <button id="btn-reset-legs" class="chalk-btn px-4 py-2 text-sm text-chalk/90">↺ Reset legs to defaults</button>
+      </div>
+      <p class="text-chalk/50 text-xs mb-3">Compare up to 3 strategies on the same chalkboard. Each overlay keeps its own breakeven markers.</p>
+
+      <div class="chalk-card-soft p-2 sm:p-4" style="background: rgba(20,29,36,0.55);">
+        <canvas id="payoff-canvas" role="img" aria-label="Options payoff diagram chart"></canvas>
+        <div id="chart-legend" class="flex flex-wrap gap-x-5 gap-y-1 px-3 pb-2 pt-1 text-sm"></div>
+      </div>
+
+      <!-- LEG EDITOR -->
+      <h3 class="font-hand text-xl mt-6 mb-2 text-chalky" style="font-weight:600">Leg editor <span class="text-chalk/50 text-sm font-sans">— strike, premium &amp; quantity are all editable</span></h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[560px]">
+          <thead>
+            <tr class="text-left text-xs uppercase tracking-widest text-chalk/50">
+              <th class="py-2 pr-2 font-medium">Leg</th>
+              <th class="py-2 pr-2 font-medium">Side</th>
+              <th class="py-2 pr-2 font-medium">Strike / entry ($)</th>
+              <th class="py-2 pr-2 font-medium">Premium ($)</th>
+              <th class="py-2 pr-2 font-medium">Qty</th>
+            </tr>
+          </thead>
+          <tbody id="legs-body"></tbody>
+        </table>
+      </div>
+      <p id="legs-msg" class="text-chalkpink text-sm mt-2" role="status"></p>
+      <p class="text-chalk/40 text-xs mt-2">Qty = option contracts (each covers 100 shares in real life) or share units for stock legs. Premiums here are illustrative — type in real market premiums for true diagrams.</p>
+    </div>
+
+    <!-- STEP 4: PLAIN-ENGLISH CARDS -->
+    <div class="mb-8">
+      <div class="flex items-center gap-3 mb-4 px-1">
+        <span class="font-hand text-chalky text-2xl" style="font-weight:700">4.</span>
+        <h2 class="font-hand text-2xl sm:text-3xl" style="font-weight:600">Your report card <span class="text-chalk/50 text-lg">— no Greek required</span></h2>
+      </div>
+      <div id="cards-box" class="grid sm:grid-cols-2 gap-4"></div>
+      <div class="chalk-card-soft mt-6 p-4 text-sm text-chalk/70">
+        <p class="font-hand text-chalky text-lg mb-1" style="font-weight:600">⚠️ A note from the teacher</p>
+        <p>PayoffPlot is an educational visualization tool. Diagrams show profit and loss <strong class="text-chalk">at expiration only</strong> and ignore time decay, implied-volatility changes, commissions, taxes, and early assignment risk. Nothing here is financial advice — paper-trade a strategy before risking real money, and consider speaking to a licensed professional.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BOTTOM AD (verbatim) ============ -->
+  <div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pb-4" role="complementary" aria-label="Advertisement">
+    <div class="mx-auto text-center" style="max-width:728px">
+      <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+      <div class="flex justify-center overflow-hidden">
+        <script async src="https://js.wpadmngr.com/static/adManager.js" data-admpid="464498"></script>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SEO ARTICLE ============ -->
+  <article id="seo-article" class="mx-auto max-w-3xl px-4 sm:px-6 py-10 text-chalk/85 leading-relaxed">
+    <h2 class="font-hand text-3xl sm:text-4xl text-chalk mb-6" style="font-weight:700">Options Payoff Diagrams, Explained Like a Teacher Would</h2>
+
+    <p class="mb-4">Every options trader eventually meets the same sketch: a bent line on a chalkboard that claims to tell the future of a trade. That sketch is an <strong class="text-chalk">options payoff diagram</strong>, and once you learn to read it, dozens of strategies that sound intimidating — straddles, iron condors, butterflies — collapse into simple pictures. This guide walks through what a payoff diagram shows, how breakeven math works for the most popular strategies, and how to use an <strong class="text-chalk">option strategy payoff calculator</strong> like PayoffPlot to compare them visually before you risk a single dollar.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">What is an options payoff diagram?</h3>
+    <p class="mb-4">An options payoff diagram plots profit or loss at expiration against the price of the underlying stock. The horizontal axis is the stock price on expiry day; the vertical axis is your profit (up) or loss (down). Each point on the line answers one question: "If the stock finishes exactly here, how much do I make or lose?" Connect the dots and you get the strategy's signature shape — the hockey stick of a long call, the tent of a butterfly, the flat-topped mesa of an iron condor.</p>
+    <p class="mb-4">The diagram is drawn under one simplifying assumption: we only care about expiration day. Whatever happens between now and then — the daily wiggling, the news spikes, the slow bleed of time decay — is invisible on this chart. That makes the payoff diagram a teaching snapshot rather than a pricing model, but it is an enormously useful one, because every strategy's risk and reward reduce to three numbers you can read straight off the line: max profit, max loss, and breakeven.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">How to read a payoff diagram in 60 seconds</h3>
+    <p class="mb-4">Start with the zero line. Everywhere the payoff line crosses it, you break even — you get your money back, no more, no less. Left of the leftmost crossing and right of the rightmost crossing, the regions are shaded mentally as loss or profit zones. Next, look at the ends of the line. Does it keep climbing forever to the right? That is unlimited profit potential, the hallmark of buying a call or a straddle. Does it flatten out? That is a capped strategy, like a spread or a condor, where you have traded away the lottery ticket for a cheaper entry and a good night's sleep.</p>
+    <p class="mb-4">Then find the lowest point of the line: that is your worst case at expiry. For anything you buy outright — a call, a put, a straddle — the worst case is simply the premium you paid, because an option can never be worth less than zero. For anything you sell naked, the line can plunge without a floor, which is why beginners are taught to respect the short side of the diagram. Finally, note the kinks: each sharp corner sits exactly at a strike price, the place where an option flips from worthless to valuable. Count the kinks and you can often guess the strategy — two kinks, one strategy family; four kinks, welcome to condor country.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">Breakeven math for the popular strategies</h3>
+    <p class="mb-4">Breakeven is the price where profit equals zero, and each strategy family has its own tidy formula. A long call breaks even at <em>strike + premium</em>: with a $100 strike and a $5 premium, the stock must reach $105 before you see a dime. A long put mirrors it at <em>strike − premium</em>. A long straddle — a call and a put at the same strike — has two breakevens, <em>strike ± total premium</em>, because you need the move in either direction to cover what you paid for both options. A $100 straddle costing $10 total breaks even at $90 and $110.</p>
+    <p class="mb-4">Spreads keep the same logic but shrink the numbers. A bull call spread breaks even at the <em>lower strike + net debit</em>; a bear put spread at the <em>higher strike − net debit</em>. An iron condor, which collects a net credit instead of paying one, breaks even at the <em>short put strike − credit</em> and the <em>short call strike + credit</em>. A cash-secured put breaks even at <em>strike − premium received</em>, and a covered call at <em>share price − premium received</em>. Memorize these six formulas and you can sanity-check any payoff diagram in your head — or just let PayoffPlot's breakeven markers do it for you, since it finds every zero-crossing numerically even when you edit the legs.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">Straddle vs strangle: the classic volatility debate</h3>
+    <p class="mb-4">No comparison gets more classroom chalk-dust than <strong class="text-chalk">straddle vs strangle</strong>. Both are long-volatility bets: you profit from a big move without predicting its direction, which makes them the go-to structures before earnings, elections, or court rulings. The difference is entirely about strike selection. A straddle buys the call and the put at the same at-the-money strike, so it starts making money sooner — but at-the-money options carry the fattest premiums, so the ticket is expensive. A strangle buys out-of-the-money options at two different strikes, which slashes the cost but pushes the two breakevens further apart, demanding a larger move.</p>
+    <p class="mb-4">Put numbers on it. Stock at $100, straddle premium $10 total: you profit beyond $90 or $110, a 10% move either way. The equivalent strangle — $105 call and $95 put for $6 total — needs $89 or $111, a bigger move, but you risk only $6 instead of $10 if the stock goes nowhere. Overlay the two on one chart and the trade-off is visible instantly: the straddle's tent is taller and narrower, the strangle's is shorter and wider with a broader flat "dead zone" in the middle where both options die worthless. As a rule of thumb, pick the straddle when you expect the move imminently and want the highest probability of covering your cost; pick the strangle when premium is rich, you want to risk less, and you believe the eventual move will be violent enough to clear the wider hurdles.</p>
+    <p class="mb-4">Both share the same enemy: a stock that does nothing. Time decay eats long premium every single day, so volatility buyers are racing the clock. That is also why the payoff diagram flatters these strategies slightly — it shows the expiry snapshot, not the painful days of watching premium evaporate while you wait for the move.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">The 12 strategies on the board</h3>
+    <p class="mb-4">PayoffPlot ships with twelve presets that cover the core curriculum. Directional bets: the <strong class="text-chalk">long call</strong> (bullish, unlimited upside, loss capped at premium) and <strong class="text-chalk">long put</strong> (bearish mirror). Stock-plus-option combos: the <strong class="text-chalk">covered call</strong> (own shares, sell a call for income, upside capped at the strike) and the <strong class="text-chalk">protective put</strong> (own shares, buy a put as insurance, downside floored). Volatility plays: the <strong class="text-chalk">straddle</strong> and <strong class="text-chalk">strangle</strong> described above. Defined-risk directional spreads: the <strong class="text-chalk">bull call spread</strong> and <strong class="text-chalk">bear put spread</strong>, which cut both the cost and the ceiling of an outright option. Range and pin plays: the <strong class="text-chalk">iron condor</strong> (collect credit, profit if the stock stays inside the wings), the <strong class="text-chalk">butterfly</strong> (cheap bet that the stock pins the middle strike), the <strong class="text-chalk">collar</strong> (nearly free hedge for shareholders, funded by a sold call), and the <strong class="text-chalk">cash-secured put</strong> (collect premium, happy to buy the stock at a discount if assigned).</p>
+    <p class="mb-4">Notice the pattern: every strategy is a remix of four Lego bricks — long call, short call, long put, short put — plus stock. Once you can draw the payoff of each brick, you can assemble any diagram by stacking them, which is exactly what the leg editor lets you do by hand.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">Why traders love spreads: capping the dream</h3>
+    <p class="mb-4">Beginners often ask why anyone would cap their own profit with a spread when the outright option offers unlimited upside. The answer is price and probability. A bull call spread typically costs a third to a half of the equivalent long call, which means the breakeven sits closer to the current price and the stock has less distance to travel before you profit. You are trading the fantasy tail — the 50% moonshot — for a much better chance of a modest win. Defined risk is the other half: the most you can lose is the debit paid, printed right on the diagram, so position sizing becomes simple arithmetic instead of a prayer. For most retail traders, that trade is worth it, which is why spreads dominate real-world options volume.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">What payoff diagrams leave out</h3>
+    <p class="mb-4">Honesty corner: the diagram is not the territory. Real options have time value that decays daily, implied volatility that expands and contracts, and bid-ask spreads that tax every entry and exit. A straddle that looks profitable at expiry may have been a loser if you sold it a week early into collapsing volatility. Commissions and taxes take another bite, and American-style options carry early-assignment risk that no expiry diagram can show. Treat the payoff diagram as chapter one — the shape of the bet — and learn the Greeks (delta, theta, vega) as chapter two before trading real capital.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">How to use PayoffPlot's option strategy payoff calculator</h3>
+    <p class="mb-4">Start with the 30-second quiz if you are unsure which strategy matches your market view — it maps your direction, budget, and risk appetite to one of the twelve presets and explains its reasoning in plain words. Then open the leg editor: every strike, premium, and quantity is editable, so you can type in real market quotes and watch the chalk curve, breakeven markers, and report cards update live. Use the overlay selectors to draw up to three strategies on the same board — straddle vs strangle is the classic first comparison — and read the plain-English report card for your max profit, max loss, and breakevens without touching a formula. Everything runs in your browser; nothing is uploaded, and there is no account, paywall, or usage limit.</p>
+
+    <h3 class="font-hand text-2xl text-chalky mt-8 mb-3" style="font-weight:600">Five habits of diagram-literate traders</h3>
+    <p class="mb-4">First, always locate the worst case before admiring the best case — the bottom of the line is the number that can end accounts. Second, check whether your breakeven demands a realistic move: a straddle needing 15% in a week on a sleepy blue-chip is a lottery ticket, not a plan. Third, prefer defined-risk structures while learning; unlimited-loss diagrams belong to traders who can explain margin calls from experience. Fourth, remember the diagram is expiry-only — if you plan to exit early, time decay and volatility are part of the trade. Fifth, sketch before you trade, every time: thirty seconds with a payoff diagram prevents most "wait, I can lose how much?" surprises. The chalkboard is patient. The market is not.</p>
+  </article>
+
+  <!-- ============ FAQS ============ -->
+  <section class="mx-auto max-w-3xl px-4 sm:px-6 pb-12" aria-label="Frequently asked questions">
+    <h2 class="font-hand text-3xl text-chalk mb-6" style="font-weight:700">Chalkboard Q&amp;A</h2>
+    <div class="space-y-3">
+      <div class="faq-item chalk-card p-4 cursor-pointer">
+        <button class="w-full flex items-center justify-between gap-3 text-left">
+          <span class="font-semibold">What is an options payoff diagram?</span>
+          <span class="faq-arrow text-chalky text-2xl leading-none">+</span>
+        </button>
+        <p class="faq-a text-chalk/75 text-sm mt-2 leading-relaxed">It is a chart showing your profit or loss at expiration for every possible stock price. The horizontal axis is the stock price at expiry, the vertical axis is profit or loss, and zero-crossings are your breakeven points.</p>
+      </div>
+      <div class="faq-item chalk-card p-4 cursor-pointer">
+        <button class="w-full flex items-center justify-between gap-3 text-left">
+          <span class="font-semibold">How do I calculate the breakeven of a straddle?</span>
+          <span class="faq-arrow text-chalky text-2xl leading-none">+</span>
+        </button>
+        <p class="faq-a text-chalk/75 text-sm mt-2 leading-relaxed">A long straddle has two breakevens: strike price plus the total premium paid, and strike price minus the total premium paid. A $100 straddle costing $10 breaks even at $90 and $110.</p>
+      </div>
+      <div class="faq-item chalk-card p-4 cursor-pointer">
+        <button class="w-full flex items-center justify-between gap-3 text-left">
+          <span class="font-semibold">Straddle vs strangle — which one should I choose?</span>
+          <span class="faq-arrow text-chalky text-2xl leading-none">+</span>
+        </button>
+        <p class="faq-a text-chalk/75 text-sm mt-2 leading-relaxed">Choose a straddle when you expect a big move soon and want the smallest required move to profit; choose a strangle when you want to pay less premium and believe the eventual move will be large enough to clear the wider breakevens.</p>
+      </div>
+      <div class="faq-item chalk-card p-4 cursor-pointer">
+        <button class="w-full flex items-center justify-between gap-3 text-left">
+          <span class="font-semibold">What is the difference between max profit and max loss?</span>
+          <span class="faq-arrow text-chalky text-2xl leading-none">+</span>
+        </button>
+        <p class="faq-a text-chalk/75 text-sm mt-2 leading-relaxed">Max profit is the highest point of the payoff line (best expiry outcome); max loss is the lowest point (worst outcome). Some strategies, like a long call, have unlimited max profit, while spreads cap both numbers.</p>
+      </div>
+      <div class="faq-item chalk-card p-4 cursor-pointer">
+        <button class="w-full flex items-center justify-between gap-3 text-left">
+          <span class="font-semibold">Do payoff diagrams account for time decay?</span>
+          <span class="faq-arrow text-chalky text-2xl leading-none">+</span>
+        </button>
+        <p class="faq-a text-chalk/75 text-sm mt-2 leading-relaxed">No. Standard payoff diagrams show profit and loss only at expiration. They ignore time decay, implied-volatility changes, commissions, and taxes — they are a teaching snapshot, not a full pricing model.</p>
+      </div>
+      <div class="faq-item chalk-card p-4 cursor-pointer">
+        <button class="w-full flex items-center justify-between gap-3 text-left">
+          <span class="font-semibold">Can I compare two option strategies on the same chart?</span>
+          <span class="faq-arrow text-chalky text-2xl leading-none">+</span>
+        </button>
+        <p class="faq-a text-chalk/75 text-sm mt-2 leading-relaxed">Yes. PayoffPlot's overlay selectors draw up to three strategies on one chart in different chalk colors, each with its own breakeven markers, so you can compare risk and reward visually.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-chalk/20 mt-4">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-chalk/60">
+    <p class="font-hand text-lg text-chalk/80" style="font-weight:600">PayoffPlot <span class="font-note text-chalky">— draw it before you trade it</span></p>
+    <p class="text-xs max-w-md text-center sm:text-right">Educational tool only — not financial advice. Payoff diagrams show expiry outcomes and ignore time decay, volatility changes, and fees.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  /* UI layer: wires DOM controls to the pure lib above. localStorage + canvas
+     live here only; the lib file stays DOM-free. */
+
+  var state = {
+    strategyId: 'long-call',
+    S0: 100,
+    legs: [],
+    ovB: 'none',
+    ovC: 'none'
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var LS_KEY = 'payoffplot-v1';
+
+  function saveState() {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        strategyId: state.strategyId, S0: state.S0, legs: state.legs,
+        ovB: state.ovB, ovC: state.ovC
+      }));
+    } catch (e) { /* private mode: ignore */ }
+  }
+
+  function loadState() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      if (!raw) return false;
+      var s = JSON.parse(raw);
+      if (!s || !getStrategy(s.strategyId)) return false;
+      state.strategyId = s.strategyId;
+      state.S0 = (typeof s.S0 === 'number' && s.S0 > 0) ? s.S0 : 100;
+      state.legs = Array.isArray(s.legs) && s.legs.length ? s.legs : defaultLegs(state.strategyId, state.S0);
+      state.ovB = s.ovB || 'none';
+      state.ovC = s.ovC || 'none';
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* ---------------- Quiz ---------------- */
+  function renderQuiz() {
+    var box = $('quiz-box');
+    box.innerHTML = '';
+    quizQuestions().forEach(function (qq, qi) {
+      var wrap = document.createElement('div');
+      var q = document.createElement('p');
+      q.className = 'font-semibold mb-2 text-chalk/90';
+      q.textContent = (qi + 1) + '. ' + qq.q;
+      wrap.appendChild(q);
+      var opts = document.createElement('div');
+      opts.className = 'flex flex-wrap gap-2';
+      qq.options.forEach(function (op) {
+        var lab = document.createElement('label');
+        lab.className = 'quiz-pill';
+        var inp = document.createElement('input');
+        inp.type = 'radio'; inp.name = 'qq-' + qq.key; inp.value = op.v;
+        var sp = document.createElement('span');
+        sp.textContent = op.t;
+        lab.appendChild(inp); lab.appendChild(sp);
+        opts.appendChild(lab);
+      });
+      wrap.appendChild(opts);
+      box.appendChild(wrap);
+    });
+  }
+
+  function readQuiz() {
+    var ans = {}, allOk = true;
+    quizQuestions().forEach(function (qq) {
+      var sel = document.querySelector('input[name="qq-' + qq.key + '"]:checked');
+      if (!sel) allOk = false; else ans[qq.key] = sel.value;
+    });
+    return { ans: ans, allOk: allOk };
+  }
+
+  function runQuiz() {
+    var r = readQuiz(), msg = $('quiz-msg'), res = $('quiz-result');
+    if (!r.allOk) {
+      msg.textContent = 'Please answer all 4 questions first — the chalkboard needs the full picture.';
+      res.classList.add('hidden');
+      return;
+    }
+    msg.textContent = '';
+    var rec = recommendStrategy(r.ans);
+    res.classList.remove('hidden');
+    res.innerHTML = '';
+    var title = document.createElement('p');
+    title.className = 'font-note text-2xl text-chalky mb-1';
+    title.textContent = 'The chalkboard recommends…';
+    var name = document.createElement('p');
+    name.className = 'font-hand text-2xl mb-1';
+    name.style.fontWeight = '700';
+    name.textContent = rec.name;
+    var tag = document.createElement('p');
+    tag.className = 'text-xs uppercase tracking-widest text-chalk/50 mb-2';
+    tag.textContent = rec.tag;
+    var why = document.createElement('p');
+    why.className = 'text-chalk/85 text-sm leading-relaxed mb-4';
+    why.textContent = rec.why;
+    var btn = document.createElement('button');
+    btn.className = 'chalk-btn chalk-btn-solid font-hand px-5 py-2';
+    btn.style.fontWeight = '600';
+    btn.textContent = 'Load ' + rec.name + ' →';
+    btn.addEventListener('click', function () { selectStrategy(rec.id, true); });
+    res.appendChild(title); res.appendChild(name); res.appendChild(tag); res.appendChild(why); res.appendChild(btn);
+    res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  /* ---------------- Strategy grid ---------------- */
+  function renderStrategyGrid() {
+    var grid = $('strategy-grid');
+    grid.innerHTML = '';
+    strategyList().forEach(function (s) {
+      var b = document.createElement('button');
+      b.className = 'strat-btn chalk-card-soft p-3 text-left' + (s.id === state.strategyId ? ' active' : '');
+      b.setAttribute('data-sid', s.id);
+      var n = document.createElement('p');
+      n.className = 'font-hand text-base leading-tight';
+      n.style.fontWeight = '600';
+      n.textContent = s.name;
+      var t = document.createElement('p');
+      t.className = 'text-[11px] text-chalk/55 mt-0.5';
+      t.textContent = s.tag;
+      b.appendChild(n); b.appendChild(t);
+      b.addEventListener('click', function () { selectStrategy(s.id, true); });
+      grid.appendChild(b);
+    });
+  }
+
+  function selectStrategy(id, resetLegs) {
+    state.strategyId = id;
+    if (resetLegs) state.legs = defaultLegs(id, state.S0);
+    renderStrategyGrid();
+    renderLegs();
+    refresh();
+    saveState();
+  }
+
+  /* ---------------- Overlay selects ---------------- */
+  function renderOverlaySelects() {
+    [['ov-b', state.ovB], ['ov-c', state.ovC]].forEach(function (pair) {
+      var sel = $(pair[0]);
+      sel.innerHTML = '';
+      var none = document.createElement('option');
+      none.value = 'none'; none.textContent = '— None —';
+      sel.appendChild(none);
+      strategyList().forEach(function (s) {
+        if (s.id === state.strategyId) return;
+        var o = document.createElement('option');
+        o.value = s.id; o.textContent = s.name;
+        sel.appendChild(o);
+      });
+      sel.value = pair[1] === state.strategyId ? 'none' : pair[1];
+    });
+  }
+
+  /* ---------------- Leg editor ---------------- */
+  function renderLegs() {
+    var tb = $('legs-body');
+    tb.innerHTML = '';
+    state.legs.forEach(function (leg, i) {
+      var tr = document.createElement('tr');
+      tr.className = 'border-t border-chalk/10';
+      var tdName = document.createElement('td');
+      tdName.className = 'py-2 pr-2 font-medium whitespace-nowrap';
+      tdName.textContent = legLabel(leg);
+      var tdSide = document.createElement('td');
+      tdSide.className = 'py-2 pr-2';
+      var sideSel = document.createElement('select');
+      sideSel.className = 'chalk-input px-2 py-1.5 text-sm';
+      ['long', 'short'].forEach(function (sd) {
+        var o = document.createElement('option');
+        o.value = sd; o.textContent = sd === 'long' ? 'Long' : 'Short';
+        sideSel.appendChild(o);
+      });
+      sideSel.value = leg.side;
+      sideSel.setAttribute('aria-label', 'Side for leg ' + (i + 1));
+      sideSel.addEventListener('change', function () { leg.side = sideSel.value; onLegsChanged(); });
+      tdSide.appendChild(sideSel);
+
+      var tdStrike = document.createElement('td');
+      tdStrike.className = 'py-2 pr-2';
+      var inK = document.createElement('input');
+      inK.type = 'number'; inK.min = '0.01'; inK.step = 'any';
+      inK.value = leg.strike; inK.className = 'chalk-input px-2 py-1.5 text-sm w-28';
+      inK.setAttribute('aria-label', (leg.kind === 'stock' ? 'Entry price' : 'Strike') + ' for leg ' + (i + 1));
+      inK.addEventListener('change', function () {
+        var v = parseFloat(inK.value);
+        if (!(v > 0)) { legsError('Strike / entry price must be a positive number.'); inK.value = leg.strike; return; }
+        leg.strike = Math.round(v * 100) / 100; onLegsChanged();
+      });
+      tdStrike.appendChild(inK);
+
+      var tdPrem = document.createElement('td');
+      tdPrem.className = 'py-2 pr-2';
+      var inP = document.createElement('input');
+      inP.type = 'number'; inP.min = '0'; inP.step = 'any';
+      inP.value = leg.premium; inP.className = 'chalk-input px-2 py-1.5 text-sm w-24';
+      inP.disabled = leg.kind === 'stock';
+      inP.setAttribute('aria-label', 'Premium for leg ' + (i + 1));
+      inP.addEventListener('change', function () {
+        var v = parseFloat(inP.value);
+        if (!(v >= 0)) { legsError('Premium must be zero or a positive number.'); inP.value = leg.premium; return; }
+        leg.premium = Math.round(v * 100) / 100; onLegsChanged();
+      });
+      tdPrem.appendChild(inP);
+
+      var tdQty = document.createElement('td');
+      tdQty.className = 'py-2 pr-2';
+      var inQ = document.createElement('input');
+      inQ.type = 'number'; inQ.min = '1'; inQ.step = '1';
+      inQ.value = leg.qty; inQ.className = 'chalk-input px-2 py-1.5 text-sm w-20';
+      inQ.setAttribute('aria-label', 'Quantity for leg ' + (i + 1));
+      inQ.addEventListener('change', function () {
+        var v = parseInt(inQ.value, 10);
+        if (!(v >= 1)) { legsError('Quantity must be at least 1.'); inQ.value = leg.qty; return; }
+        leg.qty = v; onLegsChanged();
+      });
+      tdQty.appendChild(inQ);
+
+      tr.appendChild(tdName); tr.appendChild(tdSide); tr.appendChild(tdStrike); tr.appendChild(tdPrem); tr.appendChild(tdQty);
+      tb.appendChild(tr);
+    });
+  }
+
+  function legsError(msg) {
+    $('legs-msg').textContent = msg;
+    setTimeout(function () { $('legs-msg').textContent = ''; }, 4000);
+  }
+
+  function onLegsChanged() {
+    renderLegs();
+    refresh();
+    saveState();
+  }
+
+  /* ---------------- Chalk chart ---------------- */
+  var canvas = null, ctx = null;
+
+  function jit(i, amt) {
+    var x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+    return ((x - Math.floor(x)) - 0.5) * 2 * amt;
+  }
+
+  function chalkLine(c, x1, y1, x2, y2, seed) {
+    var segs = Math.max(2, Math.round(Math.hypot(x2 - x1, y2 - y1) / 14));
+    c.beginPath();
+    for (var i = 0; i <= segs; i++) {
+      var t = i / segs;
+      var px = x1 + (x2 - x1) * t + jit(seed + i, 1.6);
+      var py = y1 + (y2 - y1) * t + jit(seed + 999 + i, 1.6);
+      if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+    }
+    c.stroke();
+  }
+
+  function drawChart() {
+    if (!canvas) { canvas = $('payoff-canvas'); ctx = canvas.getContext('2d'); }
+    var dpr = window.devicePixelRatio || 1;
+    var W = canvas.clientWidth, H = canvas.clientHeight;
+    if (!W || !H) return;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    var range = chartRange(state.S0, state.legs);
+    var lo = range.lo, hi = range.hi;
+
+    /* series: main + overlays */
+    var series = [];
+    series.push({ id: state.strategyId, name: getStrategy(state.strategyId).name, legs: state.legs, color: chalkColors()[0], main: true });
+    if (state.ovB !== 'none' && getStrategy(state.ovB)) {
+      series.push({ id: state.ovB, name: getStrategy(state.ovB).name, legs: defaultLegs(state.ovB, state.S0), color: chalkColors()[1], main: false });
+    }
+    if (state.ovC !== 'none' && getStrategy(state.ovC) && state.ovC !== state.ovB) {
+      series.push({ id: state.ovC, name: getStrategy(state.ovC).name, legs: defaultLegs(state.ovC, state.S0), color: chalkColors()[2], main: false });
+    }
+
+    var curves = series.map(function (s) { return payoffCurve(s.id, s.legs, lo, hi, 220); });
+    var yMin = 0, yMax = 0;
+    curves.forEach(function (pts) {
+      pts.forEach(function (pt) {
+        if (pt.p < yMin) yMin = pt.p;
+        if (pt.p > yMax) yMax = pt.p;
+      });
+    });
+    var padY = Math.max((yMax - yMin) * 0.18, 1);
+    yMin -= padY; yMax += padY;
+    if (yMin > 0) yMin = 0;
+    if (yMax < 0) yMax = 0;
+
+    var padL = 58, padR = 14, padT = 18, padB = 42;
+    var iw = W - padL - padR, ih = H - padT - padB;
+    function X(s) { return padL + (s - lo) / (hi - lo) * iw; }
+    function Y(p) { return padT + (1 - (p - yMin) / (yMax - yMin)) * ih; }
+
+    /* faint chalk grid */
+    ctx.strokeStyle = 'rgba(245,240,230,0.10)';
+    ctx.lineWidth = 1;
+    for (var g = 1; g < 5; g++) {
+      var gy = padT + ih * g / 5;
+      chalkLine(ctx, padL, gy, padL + iw, gy, g * 7);
+    }
+    for (var gx = 1; gx < 6; gx++) {
+      var gxx = padL + iw * gx / 6;
+      chalkLine(ctx, gxx, padT, gxx, padT + ih, gx * 13);
+    }
+
+    /* zero line */
+    if (yMin < 0 && yMax > 0) {
+      ctx.strokeStyle = 'rgba(245,240,230,0.45)';
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([7, 6]);
+      chalkLine(ctx, padL, Y(0), padL + iw, Y(0), 4242);
+      ctx.setLineDash([]);
+    }
+
+    /* axes */
+    ctx.strokeStyle = 'rgba(245,240,230,0.85)';
+    ctx.lineWidth = 2;
+    chalkLine(ctx, padL, padT, padL, padT + ih, 11);
+    chalkLine(ctx, padL, padT + ih, padL + iw, padT + ih, 22);
+    ctx.fillStyle = 'rgba(245,240,230,0.75)';
+    ctx.font = '12px "Shantell Sans", cursive';
+    ctx.fillText('stock price at expiry →', padL + iw - 158, padT + ih + 26);
+    ctx.save();
+    ctx.translate(14, padT + 8);
+    ctx.fillText('P/L', 0, 0);
+    ctx.restore();
+
+    /* x tick labels */
+    ctx.fillStyle = 'rgba(245,240,230,0.6)';
+    ctx.font = '11px sans-serif';
+    for (var t = 0; t <= 4; t++) {
+      var sv = lo + (hi - lo) * t / 4;
+      var tx = X(sv);
+      ctx.fillText('$' + Math.round(sv), tx - 12, padT + ih + 16);
+    }
+
+    /* "now" marker for current stock price */
+    if (state.S0 >= lo && state.S0 <= hi) {
+      ctx.strokeStyle = 'rgba(245,240,230,0.5)';
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([4, 5]);
+      chalkLine(ctx, X(state.S0), padT, X(state.S0), padT + ih, 777);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(245,240,230,0.85)';
+      ctx.font = '12px "Shantell Sans", cursive';
+      ctx.fillText('now $' + state.S0, Math.min(X(state.S0) + 6, W - 70), padT + 14);
+    }
+
+    /* payoff curves */
+    series.forEach(function (s, si) {
+      var pts = curves[si];
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = s.main ? 3 : 2.2;
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = s.main ? 10 : 6;
+      ctx.beginPath();
+      pts.forEach(function (pt, i) {
+        var px = X(pt.s) + jit(i + si * 500, 0.7);
+        var py = Y(pt.p) + jit(i + si * 500 + 250, 0.7);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    });
+
+    /* breakeven markers */
+    var beLabels = [];
+    series.forEach(function (s, si) {
+      var bes = breakevens(s.legs, lo, hi);
+      bes.forEach(function (b, bi) {
+        var bx = X(b), by = Y(0);
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(bx + jit(bi + si * 31, 1), by + jit(bi + si * 31 + 9, 1), 6, 0, Math.PI * 2);
+        ctx.stroke();
+        chalkLine(ctx, bx - 4, by - 4, bx + 4, by + 4, bi * 3 + si);
+        chalkLine(ctx, bx - 4, by + 4, bx + 4, by - 4, bi * 5 + si);
+        beLabels.push({ x: bx, color: s.color, text: 'BE $' + b });
+      });
+    });
+    ctx.font = '11px "Shantell Sans", cursive';
+    beLabels.forEach(function (l, i) {
+      ctx.fillStyle = l.color;
+      var lx = Math.max(padL + 2, Math.min(l.x - 24, W - 64));
+      ctx.fillText(l.text, lx, padT + ih - 6 - (i % 2) * 0);
+    });
+
+    /* legend */
+    var legend = $('chart-legend');
+    legend.innerHTML = '';
+    series.forEach(function (s) {
+      var item = document.createElement('span');
+      item.className = 'inline-flex items-center gap-1.5';
+      var dot = document.createElement('span');
+      dot.style.cssText = 'display:inline-block;width:22px;height:3px;background:' + s.color + ';border-radius:2px;box-shadow:0 0 6px ' + s.color;
+      var lab = document.createElement('span');
+      lab.textContent = s.name + (s.main ? ' (yours)' : '');
+      lab.style.color = s.color;
+      item.appendChild(dot); item.appendChild(lab);
+      legend.appendChild(item);
+    });
+  }
+
+  /* ---------------- Report cards ---------------- */
+  function renderCards() {
+    var box = $('cards-box');
+    box.innerHTML = '';
+    var range = chartRange(state.S0, state.legs);
+    var cards = plainEnglishCards(state.strategyId, state.legs, range.hi);
+    var tones = {
+      good: { border: '#7BDFF2', icon: '💰' },
+      bad: { border: '#FF8FA3', icon: '📉' },
+      neutral: { border: '#FFD166', icon: '⚖️' }
+    };
+    cards.forEach(function (c, i) {
+      var tone = tones[c.tone] || tones.neutral;
+      var icon = i === 3 ? '🧠' : tone.icon;
+      var div = document.createElement('div');
+      div.className = 'chalk-card p-5';
+      div.style.borderColor = tone.border;
+      div.style.borderWidth = '2px';
+      var h = document.createElement('p');
+      h.className = 'font-hand text-lg mb-2';
+      h.style.fontWeight = '600';
+      h.textContent = icon + ' ' + c.title;
+      var p = document.createElement('p');
+      p.className = 'text-sm text-chalk/80 leading-relaxed';
+      p.textContent = c.body;
+      div.appendChild(h); div.appendChild(p);
+      box.appendChild(div);
+    });
+  }
+
+  function refresh() {
+    renderOverlaySelects();
+    drawChart();
+    renderCards();
+  }
+
+  /* ---------------- FAQ toggles ---------------- */
+  function wireFaqs() {
+    var items = document.querySelectorAll('.faq-item');
+    items.forEach(function (it) {
+      it.addEventListener('click', function () { it.classList.toggle('open'); });
+    });
+  }
+
+  /* ---------------- init ---------------- */
+  function init() {
+    renderQuiz();
+    var had = loadState();
+    if (!had) {
+      state.legs = defaultLegs(state.strategyId, state.S0);
+    }
+    $('in-s0').value = state.S0;
+    renderStrategyGrid();
+    renderLegs();
+    refresh();
+    wireFaqs();
+
+    $('quiz-go').addEventListener('click', runQuiz);
+
+    $('in-s0').addEventListener('change', function () {
+      var v = parseFloat($('in-s0').value);
+      if (!(v > 0)) {
+        legsError('Stock price must be a positive number.');
+        $('in-s0').value = state.S0;
+        return;
+      }
+      state.S0 = Math.round(v * 100) / 100;
+      refresh();
+      saveState();
+    });
+
+    $('ov-b').addEventListener('change', function () { state.ovB = $('ov-b').value; refresh(); saveState(); });
+    $('ov-c').addEventListener('change', function () { state.ovC = $('ov-c').value; refresh(); saveState(); });
+
+    $('btn-reset-legs').addEventListener('click', function () {
+      state.legs = defaultLegs(state.strategyId, state.S0);
+      renderLegs(); refresh(); saveState();
+    });
+
+    var rT;
+    window.addEventListener('resize', function () {
+      clearTimeout(rT);
+      rT = setTimeout(drawChart, 150);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
